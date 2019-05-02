@@ -13,11 +13,16 @@ class DataBase:
         self.approved = {}
         self.load()
 
+
     def getWord(self, start, ban):
+        if not start in self.testing:
+            print('Error400')
+            exit()
+
         tries = 0
         while True:
             go = True
-            if len(self.testing[start]) > 0 and tries < 2:
+            if (len(self.testing[start]) > 0 and tries < 2) or len(self.approved[start] == 0):
                 it = random.randint(0, len(self.testing[start])-1)
                 word = self.testing[start][it]
                 for char in ban:
@@ -34,6 +39,7 @@ class DataBase:
                 if go:
                     return word
 
+
     def save(self):
         f = open("testingWords.txt", 'w')
         f.write(json.dumps(self.testing))
@@ -41,6 +47,7 @@ class DataBase:
         f = open("approvedWords.txt", 'w')
         f.write(json.dumps(self.approved))
         f.close()
+
 
     def load(self):
         f = open("testingWords.txt", 'r')
@@ -90,10 +97,13 @@ class KeyBoard:
             'ENDGAME':(30, 850),
             'BACKTOLOBBY':(235, 635),
             'QUICKMATCH':(304, 425),
-            'BACK':(30, 910)
+            'BACK':(30, 910),
+            'MULTIPLAYER':(360, 450),
+            'CONTINUEASAGUEST':(--, --)
         }
         for key in self.keys:
             self.keys[key] = (int(self.keys[key][0] * currentResolution[0] / self.res[0]), int(self.keys[key][1] * currentResolution[1] / self.res[1]))
+
 
     def analyze(self, pixels):
         self.start = ''
@@ -106,12 +116,14 @@ class KeyBoard:
             elif pixels[self.keys[key][0], self.keys[key][1]] == (145, 146, 152):
                 self.ban.append(key)
 
+
+
 class Game:
 
     def __init__(self):
-        hwnd = win32gui.FindWindow(None, "BlueStacks")
-        win32gui.SetForegroundWindow(hwnd)
-        dimensions = win32gui.GetWindowRect(hwnd)
+        self.hwnd = win32gui.FindWindow(None, "BlueStacks")
+        win32gui.SetForegroundWindow(self.hwnd)
+        dimensions = win32gui.GetWindowRect(self.hwnd)
 
         self.x = dimensions[0]
         self.y = dimensions[1]
@@ -121,65 +133,95 @@ class Game:
         self.keyboard = KeyBoard((self.w, self.h))
         self.database = DataBase()
 
-        print(dimensions)
-        print((self.x, self.y, self.x + self.w, self.y + self.h))
+        #print(dimensions)
+
 
     def getImage(self):
+        win32gui.SetForegroundWindow(hwnd)
         self.image = ImageGrab.grab((self.x, self.y, self.x + self.w, self.y + self.h))
         #self.image.show()
         self.pixels = self.image.load()
 
-    def whoseMove(self):
-        if self.pixels[self.w//2, 65] == (45, 48, 71):
-            self.enemyTurn = True
-        elif self.pixels[self.w//2, 65] == (232, 72, 85) and self.pixels[self.keyboard.keys['OK'][0], self.keyboard.keys['OK'][1]] == (133, 196, 59):
-            self.enemyTurn = False
-        else:
-            self.enemyTurn = True
+
+    def detectScreen(self):
+        self.getImage()
+        keyPixels = [(self.w // 2 - 10, 65), (self.w // 2 - 10, 65), self.keyboard.keys['ENDGAME']]
+        keyPixelsColor = []
+        for pixel in keyPixels:
+            keyPixelsColor.append(self.pixels[pixel[0], pixel[1]])
+
+        windows = {
+            'MainScreen': [(--, --, --), (--, --, --), (--, --, --)],
+            'NeedToContinueAsAGuest': [(--, --, --), (--, --, --), (--, --, --)],
+            'MultiplayerScreen': [(--, --, --), (--, --, --), (--, --, --)],
+            'SearchingScreen': [(--, --, --), (--, --, --), (--, --, --)],
+            'NoEnemyFound': [(--, --, --), (--, --, --), (--, --, --)],
+            'EnemyTurn': [(--, --, --), (--, --, --), (--, --, --)],
+            'MyTurn': [(--, --, --), (--, --, --), (--, --, --)],
+            'OopsUsedWord': [(--, --, --), (--, --, --), (--, --, --)],
+            'GameEnded': [(--, --, --), (--, --, --), (--, --, --)]
+        }
+
+        for window in windows:
+            if windows[window] == keyPixelsColor:
+                return window
+        return 'Ad'
+
 
     def grind(self):
         while True:
-            self.playGame()
-            self.newGame()
+            whatToDo()
 
-    def playGame(self):
-        gameIsOn = True
-        while gameIsOn:
-            print("EnemyTurn")
-            while self.enemyTurn:
-                self.getImage()
-                self.whoseMove()
-                if self.pixels[self.keyboard.keys['ENDGAME'][0], self.keyboard.keys['ENDGAME'][1]] == (255, 255, 255):
-                    gameIsOn = False
-                    print("Game Ended")
-                    break
-                sleep(1)
-            if not gameIsOn:
-                break
-            print("OurTurn")
+
+    def whatToDo(self):
+        currentScreen = detectScreen()
+        print(datetime.datetime.now(), "\t:\t\t", currentScreen)
+        if currentScreen == 'MainScreen':
+            self.press('MULTIPLAYER')
+            sleep(1)
+        elif currentScreen == 'NeedToContinueAsAGuest':
+            self.press('CONTINUEASAGUEST')
+            sleep(5)
+        elif currentScreen == 'MultiplayerScreen':
+            self.press('QUICKMATCH')
+            sleep(5)
+        elif currentScreen == 'SearchingScreen':
+            sleep(1)
+        elif currentScreen == 'NoEnemyFound':
+            self.press('BACK')
+            sleep(1)
+        elif currentScreen == 'EnemyTurn':
+            sleep(1)
+        elif currentScreen == 'MyTurn':
             self.doTurn()
-            self.enemyTurn = True
-
-    def newGame(self):
-        self.database.save()
-        sleep(1)
-        self.database.load()
-        sleep(3)
-        self.press('BACK')
-        sleep(7)
-        self.getImage()
-        if self.pixels[self.keyboard.keys['QUICKMATCH'][0], self.keyboard.keys['QUICKMATCH'][1]] != (255, 253, 130):
+            sleep(5)
+        elif currentScreen == 'OopsUsedWord':
+            self.press('BACK')
+            sleep(1)
+        elif currentScreen == 'GameEnded':
+            self.database.save()
+            sleep(1)
+            self.database.load()
+            self.press('BACK')
+            sleep(5)
+        elif currentScreen == 'Ad':
             self.press('BACK')
             sleep(3)
-        self.press('QUICKMATCH')
-        sleep(3)
+
+
+    def getPixelByKey(self, char):
+        self.getImage()
+        return self.pixels[self.keyboard.keys[char][0], self.keyboard.keys[char][1]]
+
 
     def press(self, char):
         pyautogui.click((self.x + self.keyboard.keys[char][0], self.y + self.keyboard.keys[char][1]))
 
+
     def doTurn(self):
         self.getImage()
         self.keyboard.analyze(self.pixels)
+
         while True:
             word = self.database.getWord(self.keyboard.start, self.keyboard.ban)
             for char in word:
@@ -187,19 +229,18 @@ class Game:
             self.press('OK')
 
             sleep(0.4)
-            self.getImage()
-            if self.pixels[self.keyboard.keys['OK'][0], self.keyboard.keys['OK'][1]] != (133, 196, 59):
-                self.database.approved[self.keyboard.start].append(word)
+
+            if self.getPixelByKey('OK') != (133, 196, 59):
+                if not word in self.database.approved[self.keyboard.start]:
+                    self.database.approved[self.keyboard.start].append(word)
                 break
+
             for i in range(len(word)):
                 self.press('ERASE')
-
-        sleep(5)
 
 
 
 from pynput import keyboard
-import os
 
 def on_press(key):
     try:
@@ -214,6 +255,5 @@ if __name__ == '__main__':
     BattleText = Game()
     Game = threading.Thread(target=BattleText.grind)
     Game.start()
-    listener = keyboard.Listener(
-        on_press=on_press)
-    listener.start()
+    #listener = keyboard.Listener(on_press=on_press)
+    #listener.start()
